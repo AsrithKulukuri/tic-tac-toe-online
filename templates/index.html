@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Tic Tac Toe</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #status {
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-gap: 5px;
+            justify-content: center;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            font-size: 48px;
+            cursor: pointer;
+            border: 2px solid #333;
+            line-height: 100px;
+        }
+    </style>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+
+<body>
+
+    <h1>Online Tic Tac Toe</h1>
+    <div id="status">Connecting to server…</div>
+    <div class="board" id="board"></div>
+
+    <script>
+        const socket = io();
+
+        let myTurn = false;
+        let mySymbol = '';
+        let currentTurn = '';
+        let room = '';
+
+        const statusDiv = document.getElementById('status');
+        const boardDiv = document.getElementById('board');
+
+        // create 9 cells
+        const cells = [];
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.dataset.index = i;
+            cell.addEventListener('click', () => {
+                if (!myTurn || cell.textContent !== '') return;
+                socket.emit('make_move', { room, index: i });
+            });
+            cells.push(cell);
+            boardDiv.appendChild(cell);
+        }
+
+        socket.on('waiting', data => {
+            statusDiv.textContent = data.message;
+        });
+
+        socket.on('start_game', data => {
+            room = data.room;
+            mySymbol = data.symbol;
+            currentTurn = data.turn;
+            myTurn = (currentTurn === socket.id);
+            statusDiv.textContent = myTurn ? "Your turn!" : "Opponent's turn";
+        });
+
+        socket.on('update_board', data => {
+            currentTurn = data.turn;
+            myTurn = (currentTurn === socket.id);
+            statusDiv.textContent = myTurn ? "Your turn!" : "Opponent's turn";
+
+            data.board.forEach((val, i) => {
+                cells[i].textContent = val;
+            });
+        });
+
+        socket.on('opponent_left', () => {
+            statusDiv.textContent = "Opponent disconnected. Game over.";
+            myTurn = false;
+        });
+    </script>
+
+</body>
+
+</html>
