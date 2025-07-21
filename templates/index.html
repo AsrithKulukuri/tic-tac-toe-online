@@ -96,7 +96,17 @@
         };
 
         socket.on('waiting', (data) => {
-            document.getElementById('status').innerText = data.message;
+            let timeLeft = 10;
+            document.getElementById('status').innerText = `${data.message} (${timeLeft})`;
+            const countdown = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(countdown);
+                    document.getElementById('status').innerText = "🤖 AI is joining...";
+                } else {
+                    document.getElementById('status').innerText = `${data.message} (${timeLeft})`;
+                }
+            }, 1000);
         });
 
         socket.on('start_game', (data) => {
