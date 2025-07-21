@@ -1,8 +1,7 @@
-import random
-from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import Flask, render_template, request
-You said:
+from flask_socketio import SocketIO, emit, join_room
+from flask_sqlalchemy import SQLAlchemy
+import random
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///scores.db'
@@ -55,33 +54,6 @@ def handle_join(data):
         waiting_player = request.sid
         waiting_player_name = name
         emit('waiting', {'message': 'Waiting for another player...'})
-
-        def ai_join():
-            global waiting_player, waiting_player_name
-            if waiting_player == request.sid:
-                room = f"room_{waiting_player}_ai"
-                join_room(room, sid=waiting_player)
-                games[room] = {
-                    'players': [waiting_player, 'ai'],
-                    'names': {waiting_player: waiting_player_name, 'ai': 'Computer'},
-                    'board': create_new_board(),
-                    'turn': random.choice([waiting_player, 'ai']),
-                    'scores': {waiting_player: 0, 'ai': 0}
-                }
-                socketio.emit('start_game', {
-                    'room': room,
-                    'symbols': {waiting_player: 'X', 'ai': 'O'},
-                    'turn': games[room]['turn'],
-                    'names': games[room]['names'],
-                    'scores': games[room]['scores'],
-                    'board': games[room]['board']
-                }, room=waiting_player)
-                if games[room]['turn'] == 'ai':
-                    make_ai_move(room)
-                waiting_player = None
-                waiting_player_name = None
-
-        socketio.start_background_task(lambda: socketio.sleep(5) or ai_join())
     else:
         room = f"room_{waiting_player}_{request.sid}"
         join_room(room, sid=waiting_player)
@@ -154,20 +126,6 @@ def handle_move(data):
             'turn': game['turn'],
             'scores': game['scores']
         }, room=room)
-
-        if game['turn'] == 'ai':
-            make_ai_move(room)
-
-
-def make_ai_move(room):
-    game = games[room]
-    available = [i for i, v in enumerate(game['board']) if v == '']
-    if available:
-        idx = random.choice(available)
-        game['board'][idx] = 'O'
-        winner = check_winner(game['board'])
-        if winner:
-            handle_move({'room': room, 'index': idx})
 
 
 @socketio.on('send_message')
