@@ -14,24 +14,43 @@
 
         #board {
             display: grid;
-            grid-template-columns: repeat(3, 100px);
-            grid-gap: 5px;
+            grid-template-columns: repeat(3, 30vw);
+            grid-gap: 2vw;
             justify-content: center;
             margin: 20px auto;
         }
 
         .cell {
-            width: 100px;
-            height: 100px;
-            font-size: 3em;
-            line-height: 100px;
+            width: 30vw;
+            height: 30vw;
+            font-size: 10vw;
+            line-height: 30vw;
             border: 1px solid #333;
             cursor: pointer;
         }
 
-        #status,
-        #scores {
-            margin-top: 20px;
+        @media (min-width: 600px) {
+            #board {
+                grid-template-columns: repeat(3, 100px);
+                grid-gap: 5px;
+            }
+
+            .cell {
+                width: 100px;
+                height: 100px;
+                font-size: 3em;
+                line-height: 100px;
+            }
+        }
+
+        #chat-messages {
+            border: 1px solid #ccc;
+            height: 150px;
+            overflow-y: scroll;
+            margin: 10px auto;
+            width: 300px;
+            padding: 5px;
+            text-align: left;
         }
     </style>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
@@ -53,9 +72,7 @@
         <div id="scores"></div>
         <div id="chat">
             <h3>Chat</h3>
-            <div id="chat-messages"
-                style="border:1px solid #ccc;height:150px;overflow-y:scroll;margin:10px auto;width:300px;padding:5px;">
-            </div>
+            <div id="chat-messages"></div>
             <input type="text" id="chat-input" placeholder="Type a message">
             <button id="chat-send">Send</button>
         </div>
@@ -100,6 +117,8 @@
                 const div = document.createElement('div');
                 div.className = 'cell';
                 div.innerText = cell;
+                if (cell === 'X') div.style.color = 'red';
+                if (cell === 'O') div.style.color = 'blue';
                 div.onclick = () => {
                     if (!cell && room) {
                         socket.emit('make_move', { room: room, index: idx });
@@ -119,7 +138,7 @@
 
         function updateScores(scores) {
             document.getElementById('scores').innerText =
-                `${myName}: ${scores[myId]} | ${opponentName}: ${scores[Object.keys(scores).find(id => id !== myId)]}`;
+                `${myName}: ${scores[myId] || 0} | ${opponentName}: ${scores[Object.keys(scores).find(id => id !== myId)] || 0}`;
         }
 
         socket.on('update_board', (data) => {
