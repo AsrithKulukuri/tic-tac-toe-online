@@ -51,6 +51,14 @@
         <div id="board"></div>
         <div id="status"></div>
         <div id="scores"></div>
+        <div id="chat">
+            <h3>Chat</h3>
+            <div id="chat-messages"
+                style="border:1px solid #ccc;height:150px;overflow-y:scroll;margin:10px auto;width:300px;padding:5px;">
+            </div>
+            <input type="text" id="chat-input" placeholder="Type a message">
+            <button id="chat-send">Send</button>
+        </div>
     </div>
 
     <script>
@@ -137,6 +145,24 @@
         socket.on('opponent_left', () => {
             alert("Opponent left the game.");
             location.reload();
+        });
+
+        // Chat
+        document.getElementById('chat-send').onclick = () => {
+            const msgInput = document.getElementById('chat-input');
+            const message = msgInput.value.trim();
+            if (message) {
+                socket.emit('send_message', { room, name: myName, message });
+                msgInput.value = '';
+            }
+        };
+
+        socket.on('receive_message', data => {
+            const chatBox = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.innerText = `${data.name}: ${data.message}`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
         });
     </script>
 

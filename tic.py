@@ -107,6 +107,17 @@ def handle_move(data):
         }, room=room)
 
 
+@socketio.on('send_message')
+def handle_message(data):
+    room = data['room']
+    message = data['message']
+    name = data['name']
+    socketio.emit('receive_message', {
+        'name': name,
+        'message': message
+    }, room=room)
+
+
 @socketio.on('disconnect')
 def handle_disconnect():
     global waiting_player, waiting_player_name
