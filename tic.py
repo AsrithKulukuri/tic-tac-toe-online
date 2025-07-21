@@ -76,7 +76,6 @@ def handle_join(data):
                     'board': games[room]['board']
                 }, room=waiting_player)
 
-                # Fix: if AI starts first, make its move
                 if games[room]['turn'] == 'ai':
                     socketio.sleep(1)
                     make_ai_move(room)
@@ -143,15 +142,15 @@ def handle_move(data):
                 'board': game['board']
             }, room=room)
 
-            game['board'] = create_new_board()
-            game['turn'] = random.choice(game['players'])
+            reset_game(room)
+            return
+
         elif winner == 'draw':
             socketio.emit('draw', room=room)
-            game['board'] = create_new_board()
-            game['turn'] = random.choice(game['players'])
-        else:
-            game['turn'] = game['players'][0] if game['turn'] == game['players'][1] else game['players'][1]
+            reset_game(room)
+            return
 
+        game['turn'] = game['players'][0] if game['turn'] == game['players'][1] else game['players'][1]
         socketio.emit('update_board', {
             'board': game['board'],
             'turn': game['turn'],
@@ -159,6 +158,7 @@ def handle_move(data):
         }, room=room)
 
         if game['turn'] == 'ai':
+            socketio.sleep(1)
             make_ai_move(room)
 
 
@@ -182,20 +182,36 @@ def make_ai_move(room):
                 'board': game['board']
             }, room=room)
 
-            game['board'] = create_new_board()
-            game['turn'] = random.choice(game['players'])
+            reset_game(room)
+            return
+
         elif winner == 'draw':
             socketio.emit('draw', room=room)
-            game['board'] = create_new_board()
-            game['turn'] = random.choice(game['players'])
-        else:
-            game['turn'] = game['players'][0]
+            reset_game(room)
+            return
 
+        game['turn'] = game['players'][0]
         socketio.emit('update_board', {
             'board': game['board'],
             'turn': game['turn'],
             'scores': game['scores']
         }, room=room)
+
+
+def reset_game(room):
+    game = games[room]
+    game['board'] = create_new_board()
+    game['turn'] = random.choice(game['players'])
+
+    socketio.emit('update_board', {
+        'board': game['board'],
+        'turn': game['turn'],
+        'scores': game['scores']
+    }, room=room)
+
+    if game['turn'] == 'ai':
+        socketio.sleep(1)
+        make_ai_move(room)
 
 
 @socketio.on('send_message')
