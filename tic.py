@@ -3,10 +3,29 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'supersecret'
-socketio = SocketIO(app, cors_allowed_origins='*')
+socketio = SocketIO(app)
 
-# Serve index.html when visiting /
+waiting_player = None
+waiting_player_name = None
+games = {}
+
+
+def create_new_board():
+    return [''] * 9
+
+
+def check_winner(board):
+    combos = [
+        (0, 1, 2), (3, 4, 5), (6, 7, 8),
+        (0, 3, 6), (1, 4, 7), (2, 5, 8),
+        (0, 4, 8), (2, 4, 6)
+    ]
+    for a, b, c in combos:
+        if board[a] != '' and board[a] == board[b] == board[c]:
+            return board[a]
+    if '' not in board:
+        return 'draw'
+    return None
 
 
 @app.route('/')
@@ -14,81 +33,94 @@ def index():
     return render_template('index.html')
 
 
-# In-memory store of waiting players and game rooms
-waiting_player = None
-games = {}  # room -> {players: [sid1, sid2], board: [...], turn: sid}
-
-
-def create_new_board():
-    return ['' for _ in range(9)]  # empty 3x3 board
-
-
-@socketio.on('connect')
-def handle_connect():
-    print(f"Client connected: {request.sid}")
-    global waiting_player
+@socketio.on('join')
+def handle_join(data):
+    global waiting_player, waiting_player_name
+    name = data['name']
     if waiting_player is None:
         waiting_player = request.sid
-        emit('waiting', {'message': 'Waiting for an opponent...'})
+        waiting_player_name = name
+        emit('waiting', {'message': 'Waiting for another player...'})
     else:
-        # Match found
         room = f"room_{waiting_player}_{request.sid}"
         join_room(room, sid=waiting_player)
         join_room(room)
         games[room] = {
             'players': [waiting_player, request.sid],
+            'names': {waiting_player: waiting_player_name, request.sid: name},
             'board': create_new_board(),
-            'turn': random.choice([waiting_player, request.sid])
+            'turn': random.choice([waiting_player, request.sid]),
+            'scores': {waiting_player: 0, request.sid: 0}
         }
         socketio.emit('start_game', {
             'room': room,
-            'symbol': 'X',
-            'turn': games[room]['turn']
-        }, room=waiting_player)
-        socketio.emit('start_game', {
-            'room': room,
-            'symbol': 'O',
-            'turn': games[room]['turn']
-        }, room=request.sid)
+            'symbols': {waiting_player: 'X', request.sid: 'O'},
+            'turn': games[room]['turn'],
+            'names': games[room]['names'],
+            'scores': games[room]['scores'],
+            'board': games[room]['board']
+        }, room=room)
         waiting_player = None
+        waiting_player_name = None
 
 
 @socketio.on('make_move')
 def handle_move(data):
     room = data['room']
     index = data['index']
-    player = request.sid
     game = games.get(room)
 
-    if not game or player != game['turn']:
-        return  # ignore invalid moves
+    if not game or request.sid != game['turn']:
+        return
 
-    if game['board'][index] != '':
-        return  # already occupied
+    symbol = 'X' if request.sid == game['players'][0] else 'O'
+    if game['board'][index] == '':
+        game['board'][index] = symbol
+        winner = check_winner(game['board'])
 
-    symbol = 'X' if player == game['players'][0] else 'O'
-    game['board'][index] = symbol
-    # Switch turn
-    game['turn'] = game['players'][0] if game['turn'] == game['players'][1] else game['players'][1]
+        if winner == 'X' or winner == 'O':
+            winning_player = game['players'][0] if winner == 'X' else game['players'][1]
+            losing_player = game['players'][1] if winner == 'X' else game['players'][0]
+            game['scores'][winning_player] += 1
 
-    socketio.emit('update_board', {
-        'board': game['board'],
-        'turn': game['turn']
-    }, room=room)
+            socketio.emit('game_over', {
+                'winner': winning_player,
+                'loser': losing_player,
+                'scores': game['scores'],
+                'board': game['board']
+            }, room=room)
+
+            # reset board for next round
+            game['board'] = create_new_board()
+            game['turn'] = random.choice(game['players'])
+        elif winner == 'draw':
+            socketio.emit('draw', room=room)
+            game['board'] = create_new_board()
+            game['turn'] = random.choice(game['players'])
+        else:
+            game['turn'] = game['players'][0] if game['turn'] == game['players'][1] else game['players'][1]
+
+        socketio.emit('update_board', {
+            'board': game['board'],
+            'turn': game['turn'],
+            'scores': game['scores']
+        }, room=room)
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    global waiting_player
-    print(f"Client disconnected: {request.sid}")
-    if waiting_player == request.sid:
+    global waiting_player, waiting_player_name
+    if request.sid == waiting_player:
         waiting_player = None
-
-    # Clean up any games the player was part of
-    for room, game in list(games.items()):
-        if request.sid in game['players']:
-            socketio.emit('opponent_left', room=room)
-            del games[room]
+        waiting_player_name = None
+    else:
+        for room, game in list(games.items()):
+            if request.sid in game['players']:
+                other_player = [p for p in game['players']
+                                if p != request.sid][0]
+                emit('opponent_left', room=other_player)
+                del games[room]
+                break
 
 
 if __name__ == '__main__':

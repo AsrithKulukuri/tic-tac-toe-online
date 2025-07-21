@@ -4,37 +4,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Tic Tac Toe</title>
+    <title>Tic Tac Toe Online</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             text-align: center;
-            margin-top: 50px;
+            margin: 20px;
         }
 
-        h1 {
-            color: #333;
-        }
-
-        #status {
-            margin-bottom: 20px;
-            font-weight: bold;
-        }
-
-        .board {
+        #board {
             display: grid;
             grid-template-columns: repeat(3, 100px);
             grid-gap: 5px;
             justify-content: center;
+            margin: 20px auto;
         }
 
         .cell {
             width: 100px;
             height: 100px;
-            font-size: 48px;
-            cursor: pointer;
-            border: 2px solid #333;
+            font-size: 3em;
             line-height: 100px;
+            border: 1px solid #333;
+            cursor: pointer;
+        }
+
+        #status,
+        #scores {
+            margin-top: 20px;
         }
     </style>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
@@ -42,60 +39,104 @@
 
 <body>
 
-    <h1>Online Tic Tac Toe</h1>
-    <div id="status">Connecting to server…</div>
-    <div class="board" id="board"></div>
+    <h1>Tic Tac Toe Online</h1>
+
+    <div id="start">
+        <input type="text" id="name" placeholder="Enter your name">
+        <button id="join">Join Game</button>
+    </div>
+
+    <div id="game" style="display:none;">
+        <h3 id="players"></h3>
+        <div id="board"></div>
+        <div id="status"></div>
+        <div id="scores"></div>
+    </div>
 
     <script>
         const socket = io();
 
-        let myTurn = false;
-        let mySymbol = '';
-        let currentTurn = '';
-        let room = '';
+        let room = null;
+        let mySymbol = null;
+        let myId = null;
+        let myName = null;
+        let opponentName = null;
 
-        const statusDiv = document.getElementById('status');
-        const boardDiv = document.getElementById('board');
+        document.getElementById('join').onclick = () => {
+            myName = document.getElementById('name').value || "Anonymous";
+            socket.emit('join', { name: myName });
+            document.getElementById('start').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('status').innerText = "Waiting for opponent...";
+        };
 
-        // create 9 cells
-        const cells = [];
-        for (let i = 0; i < 9; i++) {
-            const cell = document.createElement('div');
-            cell.classList.add('cell');
-            cell.dataset.index = i;
-            cell.addEventListener('click', () => {
-                if (!myTurn || cell.textContent !== '') return;
-                socket.emit('make_move', { room, index: i });
+        socket.on('waiting', (data) => {
+            document.getElementById('status').innerText = data.message;
+        });
+
+        socket.on('start_game', (data) => {
+            room = data.room;
+            myId = socket.id;
+            mySymbol = data.symbols[myId];
+            opponentName = Object.values(data.names).find(n => n !== myName);
+            document.getElementById('players').innerText = `${myName} (${mySymbol}) vs ${opponentName}`;
+            updateBoard(data.board);
+            updateStatus(data.turn);
+            updateScores(data.scores);
+        });
+
+        function updateBoard(board) {
+            const boardDiv = document.getElementById('board');
+            boardDiv.innerHTML = '';
+            board.forEach((cell, idx) => {
+                const div = document.createElement('div');
+                div.className = 'cell';
+                div.innerText = cell;
+                div.onclick = () => {
+                    if (!cell && room) {
+                        socket.emit('make_move', { room: room, index: idx });
+                    }
+                };
+                boardDiv.appendChild(div);
             });
-            cells.push(cell);
-            boardDiv.appendChild(cell);
         }
 
-        socket.on('waiting', data => {
-            statusDiv.textContent = data.message;
+        function updateStatus(turn) {
+            if (turn === socket.id) {
+                document.getElementById('status').innerText = "Your turn";
+            } else {
+                document.getElementById('status').innerText = `${opponentName}'s turn`;
+            }
+        }
+
+        function updateScores(scores) {
+            document.getElementById('scores').innerText =
+                `${myName}: ${scores[myId]} | ${opponentName}: ${scores[Object.keys(scores).find(id => id !== myId)]}`;
+        }
+
+        socket.on('update_board', (data) => {
+            updateBoard(data.board);
+            updateStatus(data.turn);
+            updateScores(data.scores);
         });
 
-        socket.on('start_game', data => {
-            room = data.room;
-            mySymbol = data.symbol;
-            currentTurn = data.turn;
-            myTurn = (currentTurn === socket.id);
-            statusDiv.textContent = myTurn ? "Your turn!" : "Opponent's turn";
+        socket.on('game_over', (data) => {
+            updateBoard(data.board);
+            if (data.winner === myId) {
+                alert("🎉 You won!");
+            } else {
+                alert("😞 You lost!");
+            }
+            updateScores(data.scores);
         });
 
-        socket.on('update_board', data => {
-            currentTurn = data.turn;
-            myTurn = (currentTurn === socket.id);
-            statusDiv.textContent = myTurn ? "Your turn!" : "Opponent's turn";
-
-            data.board.forEach((val, i) => {
-                cells[i].textContent = val;
-            });
+        socket.on('draw', () => {
+            alert("It's a draw!");
         });
 
         socket.on('opponent_left', () => {
-            statusDiv.textContent = "Opponent disconnected. Game over.";
-            myTurn = false;
+            alert("Opponent left the game.");
+            location.reload();
         });
     </script>
 
