@@ -1,22 +1,9 @@
 from flask import Flask, render_template, request
-from flask_socketio import SocketIO, emit, join_room
-from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///scores.db'
-db = SQLAlchemy(app)
 socketio = SocketIO(app)
-
-
-class Score(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50))
-    wins = db.Column(db.Integer, default=0)
-
-
-with app.app_context():
-    db.create_all()
 
 waiting_player = None
 waiting_player_name = None
@@ -91,19 +78,10 @@ def handle_move(data):
         game['board'][index] = symbol
         winner = check_winner(game['board'])
 
-        if winner in ('X', 'O'):
+        if winner == 'X' or winner == 'O':
             winning_player = game['players'][0] if winner == 'X' else game['players'][1]
             losing_player = game['players'][1] if winner == 'X' else game['players'][0]
             game['scores'][winning_player] += 1
-
-            winner_name = game['names'][winning_player]
-            score = Score.query.filter_by(name=winner_name).first()
-            if not score:
-                score = Score(name=winner_name, wins=1)
-                db.session.add(score)
-            else:
-                score.wins += 1
-            db.session.commit()
 
             socketio.emit('game_over', {
                 'winner': winning_player,
@@ -112,6 +90,7 @@ def handle_move(data):
                 'board': game['board']
             }, room=room)
 
+            # reset board for next round
             game['board'] = create_new_board()
             game['turn'] = random.choice(game['players'])
         elif winner == 'draw':
